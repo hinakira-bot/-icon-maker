@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SNSアイコンメーカー Pro</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✨</text></svg>">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Meiryo', sans-serif; }
+  .custom-scrollbar::-webkit-scrollbar { width: 8px; }
+  .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 4px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .animate-spin { animation: spin 1s linear infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// --- Lucide Icon wrapper ---
+function LucideIcon({ name, size = 18, className = '' }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.innerHTML = '';
+      const el = lucide.createElement(lucide.icons[name]);
+      el.setAttribute('width', size);
+      el.setAttribute('height', size);
+      if (className) el.setAttribute('class', className);
+      ref.current.appendChild(el);
+    }
+  }, [name, size, className]);
+  return <span ref={ref} className="inline-flex items-center" />;
+}
+
+// --- データ定義 ---
+const NONE_OPTION = { id: 'none', label: '指定なし', value: '', desc: 'AIにおまかせ' };
+
+const STYLE_OPTIONS = [
+  NONE_OPTION,
+  { id: 'chibi_anime', label: 'ちびキャラ (アニメ)', value: 'chibi style, anime screencap, flat color, cel shading, vibrant colors, kawaii', desc: 'アニメ塗りのポップなデフォルメ' },
+  { id: 'bikkuriman', label: 'ビックリマン風', value: 'bikkuriman sticker style, prismatic hologram background, super deformed, thick outlines, retro 80s sticker, square sticker art', desc: '80年代おまけシール風' },
+  { id: 'monst', label: 'モンスト風', value: 'monster strike style, dynamic pose, vibrant effects, detailed shading, mobile game art, fantasy, high contrast', desc: 'ソシャゲ風の豪華な塗り' },
+  { id: 'chibi_3d', label: 'ちびキャラ (3D)', value: 'chibi style, 3d render, clay texture, cute, c4d, blender style, soft lighting', desc: '粘土のようなコロッとした3D' },
+  { id: 'chibi_sticker', label: 'ステッカー風', value: 'sticker art, vector illustration, white outline, die-cut, clean lines', desc: '白縁のあるベクター風' },
+  { id: 'chibi_pixel', label: 'ドット絵 (8bit)', value: 'pixel art, 8-bit style, retro game asset, cute dot art, low res', desc: 'レトロゲーム風' },
+  { id: 'cg_render', label: '3D CG (リアル)', value: '3d render, unreal engine 5, octane render, ray tracing, high fidelity, cgi character', desc: '映画のような高品質CG' },
+  { id: 'cg_game', label: 'ゲームCG', value: '3d game character, genshin impact style, unity render, cel shaded 3d, crisp outline', desc: 'アニメ調のゲーム3D' },
+  { id: 'toriyama', label: '鳥山明風', value: 'akira toriyama style, dragon ball style, retro anime aesthetic, sharp angles, muscular, cel shading', desc: '90年代少年漫画' },
+  { id: 'oda', label: '尾田栄一郎風', value: 'eiichiro oda style, one piece style, exaggerated expressions, wide open mouth, distinctive line art, energetic', desc: 'エネルギッシュ' },
+  { id: 'araki', label: '荒木飛呂彦風', value: 'hirohiko araki style, jojo style, distinct facial features, heavy shading, dramatic posing', desc: '劇画調、濃い陰影' },
+  { id: 'inoue', label: '井上雄彦風', value: 'takehiko inoue style, vagabond style, realistic manga, detailed hatching, sumi-e influence, brush strokes', desc: '筆致を感じるリアルな劇画' },
+  { id: 'real_photo', label: 'リアル (写真)', value: 'photorealistic, 8k, raw photo, shot on 85mm lens, highly detailed skin texture, cinematic lighting', desc: '実写のような超高画質' },
+  { id: 'real_oil', label: '油彩画', value: 'oil painting, classical art style, thick brushstrokes, textured canvas, artistic lighting', desc: '重厚感のある油絵' },
+  { id: 'real_cyber', label: 'サイバーパンク', value: 'semi-realistic, cyberpunk style, neon lights, futuristic fashion, digital art, glowing effects', desc: 'ネオン輝く近未来' },
+  { id: 'illus_flat', label: 'フラット', value: 'modern flat illustration, minimalism, geometric shapes, trendy vector art', desc: 'シンプルでおしゃれ' },
+  { id: 'illus_gothic', label: 'ゴシック', value: 'gothic art style, dark fantasy, intricate details, gloomy atmosphere, tim burton style', desc: '暗く美しい世界観' },
+];
+
+const GENDER_OPTIONS = [
+  NONE_OPTION,
+  { id: 'girl', label: '女の子', value: '1girl, young woman' },
+  { id: 'boy', label: '男の子', value: '1boy, young man' },
+  { id: 'androgynous', label: '中性', value: 'androgynous person, genderless aesthetic' },
+  { id: 'cat_girl', label: '猫耳娘', value: '1girl, cat ears, nekomimi, cute' },
+  { id: 'elf', label: 'エルフ', value: 'elf, pointed ears, fantasy being' },
+  { id: 'monster', label: 'モンスター/人外', value: 'monster, creature, beast, non-human, fantasy creature', desc: 'クリーチャー、魔物' },
+  { id: 'robot', label: 'ロボット/メカ', value: 'robot, mecha, android, mechanical parts, glowing eyes', desc: '機械、アンドロイド' },
+];
+
+const ETHNICITY_OPTIONS = [
+  NONE_OPTION,
+  { id: 'asian', label: 'アジア系', value: 'asian, japanese face' },
+  { id: 'caucasian', label: '白人系', value: 'caucasian, western face' },
+  { id: 'black', label: '黒人系', value: 'black skin, african american' },
+  { id: 'hispanic', label: 'ヒスパニック系', value: 'hispanic, latino' },
+  { id: 'pale', label: '色白', value: 'pale skin, fair skin' },
+  { id: 'tan', label: '褐色肌', value: 'tanned skin, dark skin' },
+  { id: 'fantasy_skin', label: '異色肌', value: 'colored skin, fantasy skin color' },
+];
+
+const FACE_TASTE_OPTIONS = [
+  NONE_OPTION,
+  { id: 'cute', label: '可愛い系', value: 'cute face, kawaii, adorable, baby face, big eyes' },
+  { id: 'beauty', label: '美人・イケメン', value: 'beautiful face, handsome, well-defined features, mature beauty' },
+  { id: 'cool', label: 'クール系', value: 'cool face, sharp eyes, mysterious aura, dignified' },
+  { id: 'comical', label: 'コミカル', value: 'comical face, funny expression, exaggerated features, cartoonish' },
+  { id: 'chubby', label: 'ぽっちゃり', value: 'chubby face, round face, plump' },
+  { id: 'child', label: '子供系', value: 'child, little kid, youthful' },
+  { id: 'auntie', label: 'マダム系', value: 'mature woman, middle-aged woman, auntie, madam' },
+  { id: 'uncle', label: 'おじさん系', value: 'middle-aged man, uncle, dandy, beard, mature man' },
+  { id: 'elder', label: '老人・長老', value: 'elderly, old person, wrinkled face, wise look' },
+];
+
+const HAIR_OPTIONS = [
+  NONE_OPTION,
+  { id: 'short', label: 'ショート', value: 'short hair' },
+  { id: 'long', label: 'ロング', value: 'long flowing hair' },
+  { id: 'medium', label: 'ミディアム', value: 'medium length hair' },
+  { id: 'bob', label: 'ボブ', value: 'bob cut hair' },
+  { id: 'ponytail', label: 'ポニーテール', value: 'high ponytail' },
+  { id: 'twintails', label: 'ツインテール', value: 'twin tails' },
+  { id: 'braids', label: '三つ編み', value: 'braided hair' },
+  { id: 'buns', label: 'お団子', value: 'double buns hair' },
+  { id: 'messy', label: '無造作ヘア', value: 'messy hair' },
+  { id: 'spiky', label: 'ツンツン髪', value: 'spiky hair' },
+  { id: 'afro', label: 'アフロ', value: 'curly hair, afro' },
+  { id: 'bald', label: 'スキンヘッド', value: 'bald head' },
+];
+
+const HAIR_COLOR_OPTIONS = [
+  NONE_OPTION,
+  { id: 'brown', label: '茶髪', value: 'brown hair' },
+  { id: 'black', label: '黒髪', value: 'black hair' },
+  { id: 'blonde', label: '金髪', value: 'blonde hair' },
+  { id: 'silver', label: '銀髪', value: 'silver hair' },
+  { id: 'white', label: '白髪', value: 'white hair' },
+  { id: 'pink', label: 'ピンク', value: 'pink hair' },
+  { id: 'blue', label: '青髪', value: 'blue hair' },
+  { id: 'red', label: '赤髪', value: 'red hair' },
+  { id: 'green', label: '緑髪', value: 'green hair' },
+  { id: 'purple', label: '紫髪', value: 'purple hair' },
+  { id: 'orange', label: 'オレンジ', value: 'orange hair' },
+  { id: 'gradient', label: 'グラデ', value: 'multicolored hair, gradient hair' },
+  { id: 'rainbow', label: '虹色', value: 'rainbow colored hair' },
+];
+
+const EYE_OPTIONS = [
+  NONE_OPTION,
+  { id: 'blue', label: '青', value: 'detailed blue eyes' },
+  { id: 'red', label: '赤', value: 'detailed red eyes' },
+  { id: 'green', label: '緑', value: 'detailed green eyes' },
+  { id: 'golden', label: '金', value: 'detailed golden eyes' },
+  { id: 'purple', label: '紫', value: 'detailed purple eyes' },
+  { id: 'black', label: '黒', value: 'detailed black eyes' },
+  { id: 'hetero', label: 'オッドアイ', value: 'heterochromia' },
+  { id: 'closed', label: '閉じ目', value: 'closed eyes' },
+  { id: 'star', label: '星目', value: 'star-shaped pupils' },
+  { id: 'heart', label: 'ハート目', value: 'heart-shaped pupils' },
+  { id: 'glowing', label: '発光', value: 'glowing eyes' },
+  { id: 'no_eyes', label: '目隠れ', value: 'eyes covered by hair, no eyes' },
+];
+
+const EXPRES_OPTIONS = [
+  NONE_OPTION,
+  { id: 'smile', label: '微笑み', value: 'gentle smile, happy expression' },
+  { id: 'laugh', label: '大笑い', value: 'laughing, excited, energetic' },
+  { id: 'cool', label: 'クール', value: 'expressionless, cool vibe, mysterious' },
+  { id: 'wink', label: 'ウインク', value: 'winking, playful expression' },
+  { id: 'angry', label: '怒り', value: 'pouty face, annoyed, angry' },
+  { id: 'sad', label: '泣き顔', value: 'crying, tears, sad expression' },
+  { id: 'surprised', label: '驚き', value: 'surprised, open mouth' },
+  { id: 'blush', label: '赤面', value: 'blushing, shy, embarrassed' },
+  { id: 'smug', label: 'ドヤ顔', value: 'smug face, confident' },
+  { id: 'crazy', label: '狂気', value: 'crazy expression, wide eyes, yandere' },
+  { id: 'scream', label: '叫び', value: 'screaming, shouting, intense expression' },
+];
+
+const FASHION_THEME_OPTIONS = [
+  NONE_OPTION,
+  { id: 'casual', label: 'カジュアル', value: 'casual fashion, relaxed style, everyday clothes' },
+  { id: 'harajuku', label: '原宿系', value: 'harajuku fashion, colorful, decora, kawaii, street style' },
+  { id: 'minato', label: '港区系', value: 'luxury fashion, elegant, high class, expensive clothes' },
+  { id: 'ginza', label: '銀座系', value: 'ginza style, sophisticated, mature, classy, high-end fashion' },
+  { id: 'akiba', label: '秋葉原系', value: 'akihabara style, otaku fashion, plaid shirt, backpack' },
+  { id: 'country', label: '田舎系', value: 'countryside style, simple clothes, rustic, natural' },
+  { id: 'paris', label: 'パリ系', value: 'parisian chic, french style, beret, striped shirt, trench coat' },
+  { id: 'american', label: 'アメリカ系', value: 'american casual, denim, t-shirt, baseball cap, sporty' },
+  { id: 'hisense', label: 'ハイセンス', value: 'high fashion, avant-garde, stylish, runway model look' },
+  { id: 'mode', label: 'モード系', value: 'mode fashion, monochrome, sharp lines, yohji style' },
+  { id: 'gal', label: 'ギャル系', value: 'gyaru style, gal fashion, flashy, makeup, bleached hair' },
+  { id: 'rpg', label: 'RPG系', value: 'rpg adventurer, fantasy costume, armor, cape' },
+  { id: 'anime', label: 'アニメ系', value: 'anime cosplay, costume play, character outfit' },
+  { id: 'cyber', label: '未来系', value: 'futuristic fashion, cyber fashion, metallic, neon, sci-fi suit' },
+  { id: 'punk', label: 'パンク', value: 'punk fashion, studded jacket, leather, spikes' },
+  { id: 'goth', label: 'ゴスロリ', value: 'gothic lolita fashion, frills, lace, black dress' },
+];
+
+const TOPS_OPTIONS = [
+  NONE_OPTION,
+  { id: 'tshirt', label: 'Tシャツ', value: 'wearing a t-shirt' },
+  { id: 'shirt', label: 'シャツ', value: 'wearing a white shirt, collared shirt' },
+  { id: 'hoodie', label: 'パーカー', value: 'wearing a hoodie, streetwear' },
+  { id: 'knit', label: 'ニット', value: 'wearing a knitted sweater, cozy clothes' },
+  { id: 'blazer', label: 'ブレザー', value: 'wearing a school blazer, school uniform' },
+  { id: 'sailor', label: 'セーラー', value: 'wearing a sailor uniform' },
+  { id: 'jacket', label: 'ジャケット', value: 'wearing a stylish jacket' },
+  { id: 'coat', label: 'コート', value: 'wearing a trench coat, winter clothes' },
+  { id: 'dress', label: 'ドレス', value: 'wearing a beautiful dress, one-piece dress' },
+  { id: 'maid', label: 'メイド服', value: 'wearing a maid costume, frills' },
+  { id: 'kimono', label: '着物', value: 'wearing a kimono, japanese traditional clothes' },
+  { id: 'armor', label: '鎧', value: 'wearing fantasy armor, metallic details' },
+  { id: 'tech', label: 'テック', value: 'wearing techwear, futuristic gear' },
+  { id: 'jersey', label: 'ジャージ', value: 'wearing a track suit, jersey' },
+  { id: 'suit', label: 'スーツ', value: 'wearing a formal suit and tie' },
+  { id: 'bikini', label: '水着', value: 'wearing a bikini, swimwear' },
+];
+
+const BOTTOMS_OPTIONS = [
+  NONE_OPTION,
+  { id: 'jeans', label: 'ジーンズ', value: 'wearing denim jeans' },
+  { id: 'skirt', label: 'スカート', value: 'wearing a skirt' },
+  { id: 'pleated', label: 'プリーツ', value: 'wearing a pleated skirt' },
+  { id: 'shorts', label: '短パン', value: 'wearing short pants' },
+  { id: 'cargo', label: 'カーゴ', value: 'wearing cargo pants' },
+  { id: 'slacks', label: 'スラックス', value: 'wearing formal trousers' },
+  { id: 'leggings', label: 'レギンス', value: 'wearing leggings' },
+  { id: 'tights', label: 'タイツ', value: 'wearing black tights' },
+  { id: 'socks', label: 'ニーソ', value: 'wearing knee-high socks' },
+];
+
+const BG_OPTIONS = [
+  NONE_OPTION,
+  { id: 'simple', label: '単色', value: 'simple white background, minimalist' },
+  { id: 'gradient', label: 'グラデ', value: 'abstract gradient background, colorful' },
+  { id: 'hologram', label: 'ホログラム', value: 'prismatic hologram background, glitter sticker texture' },
+  { id: 'effect', label: 'エフェクト', value: 'dynamic energy effects background, particles, aura' },
+  { id: 'nature', label: '自然', value: 'flower garden background, nature, sunlight' },
+  { id: 'forest', label: '森', value: 'forest background, trees, sunlight filtering through trees' },
+  { id: 'ocean', label: '海', value: 'ocean background, beach, blue sky' },
+  { id: 'city', label: '都会', value: 'city bokeh background, night lights, neon' },
+  { id: 'room', label: '部屋', value: 'cozy room background, indoor, sunlight through window' },
+  { id: 'cafe', label: 'カフェ', value: 'cafe background, coffee shop, indoor' },
+  { id: 'classroom', label: '教室', value: 'classroom background, school desk' },
+  { id: 'ruins', label: '廃墟', value: 'abandoned ruins background, overgrown' },
+  { id: 'space', label: '宇宙', value: 'space background, stars, galaxy' },
+  { id: 'comic', label: '漫画背景', value: 'manga speed lines background, halftone dots' },
+  { id: 'wasteland', label: '荒野', value: 'wasteland background, desert, dry land, apocalyptic' },
+  { id: 'cave', label: '洞窟', value: 'cave background, underground, dark rock cavern' },
+  { id: 'castle_town', label: '城下町', value: 'medieval castle town background, stone streets, fantasy city' },
+  { id: 'magic_city', label: '魔法都市', value: 'magical city background, floating islands, fantasy architecture' },
+  { id: 'future_city', label: '未来都市', value: 'futuristic city background, flying cars, high tech skyscrapers' },
+  { id: 'cyber_bg', label: '電脳', value: 'cyberpunk city background, digital space, data stream' },
+];
+
+const TEXT_POS_OPTIONS = [
+  { id: 'top_center', label: '上部中央', value: 'text at top center' },
+  { id: 'bottom_center', label: '下部中央', value: 'text at bottom center' },
+  { id: 'top_right', label: '右上', value: 'text at top right' },
+  { id: 'bottom_right', label: '右下', value: 'text at bottom right' },
+  { id: 'top_left', label: '左上', value: 'text at top left' },
+  { id: 'bottom_left', label: '左下', value: 'text at bottom left' },
+];
+
+const ANGLE_OPTIONS = [
+  NONE_OPTION,
+  { id: 'face', label: '顔アップ', value: 'extreme close-up on face, face focus' },
+  { id: 'portrait', label: 'バストアップ', value: 'upper body, portrait framing' },
+  { id: 'waist', label: '腰上', value: 'cowboy shot, waist up' },
+  { id: 'knees', label: '膝上', value: 'knee up shot' },
+  { id: 'full', label: '全身', value: 'full body shot, showing shoes' },
+  { id: 'dynamic', label: 'ダイナミック', value: 'dynamic angle, dutch angle, action pose' },
+  { id: 'back', label: '振り返り', value: 'looking back, from behind' },
+  { id: 'above', label: '俯瞰', value: 'view from above, high angle' },
+  { id: 'below', label: 'アオリ', value: 'view from below, low angle' },
+];
+
+const SIZE_OPTIONS = [
+  { id: 'square', label: '正方形 (1:1)', value: '1:1', desc: 'SNSアイコンに最適' },
+  { id: 'portrait', label: '縦長 (9:16)', value: '9:16', desc: 'スマホ壁紙・ストーリー用' },
+];
+
+// --- SelectionSection ---
+function SelectionSection({ title, iconName, options, selected, onChange, customValue, onCustomChange, placeholder, gridCols }) {
+  placeholder = placeholder || '追加・上書きの要素を入力';
+  gridCols = gridCols || 'grid-cols-2 sm:grid-cols-3';
+  return (
+    <div className="mb-8">
+      <h3 className="flex items-center gap-2 text-md font-bold text-gray-700 mb-3 px-1 border-l-4 border-indigo-500 pl-2">
+        <span className="text-indigo-500"><LucideIcon name={iconName} size={18} /></span>
+        {title}
+      </h3>
+      <div className={`grid ${gridCols} gap-2 mb-3`}>
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => onChange(opt.id)}
+            className={`relative p-2 rounded-lg text-left transition-all duration-200 border-2 flex flex-col justify-center min-h-[50px] ${
+              selected === opt.id
+                ? 'border-indigo-500 bg-indigo-50 text-indigo-700 shadow-sm'
+                : 'border-transparent bg-white text-gray-600 hover:bg-gray-50 hover:border-gray-200 shadow-sm'
+            }`}
+          >
+            <div className="font-bold text-xs sm:text-sm flex items-center gap-2">
+              {opt.id === 'square' && <LucideIcon name="Square" size={14} />}
+              {opt.id === 'portrait' && <LucideIcon name="RectangleVertical" size={14} />}
+              {opt.label}
+            </div>
+            {opt.desc && <div className="hidden sm:block text-[10px] text-gray-400 mt-0.5 leading-tight">{opt.desc}</div>}
+            {selected === opt.id && selected !== 'none' && (
+              <div className="absolute top-1 right-1 text-indigo-500"><LucideIcon name="Check" size={12} /></div>
+            )}
+          </button>
+        ))}
+      </div>
+      <div className="relative">
+        <input
+          type="text"
+          value={customValue}
+          onChange={(e) => onCustomChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full p-2 pl-9 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm transition-all"
+        />
+        <span className="absolute left-3 top-2.5 text-gray-400"><LucideIcon name="Pencil" size={14} /></span>
+      </div>
+    </div>
+  );
+}
+
+// --- メインコンポーネント ---
+function App() {
+  const [activeTab, setActiveTab] = useState('style');
+  const [selectedStyle, setSelectedStyle] = useState('chibi_anime');
+  const [selectedSize, setSelectedSize] = useState('square');
+  const [selectedGender, setSelectedGender] = useState('girl');
+  const [selectedEthnicity, setSelectedEthnicity] = useState('none');
+  const [selectedFaceTaste, setSelectedFaceTaste] = useState('none');
+  const [selectedHair, setSelectedHair] = useState('long');
+  const [selectedHairColor, setSelectedHairColor] = useState('brown');
+  const [selectedEye, setSelectedEye] = useState('blue');
+  const [selectedExpres, setSelectedExpres] = useState('smile');
+  const [selectedFashionTheme, setSelectedFashionTheme] = useState('none');
+  const [selectedTops, setSelectedTops] = useState('none');
+  const [selectedBottoms, setSelectedBottoms] = useState('none');
+  const [selectedBg, setSelectedBg] = useState('simple');
+  const [selectedAngle, setSelectedAngle] = useState('portrait');
+  const [selectedTextPos, setSelectedTextPos] = useState('bottom_center');
+
+  const [customInputs, setCustomInputs] = useState({
+    style: '', size: '', gender: '', ethnicity: '', faceTaste: '',
+    hair: '', hairColor: '', eye: '', expres: '', fashionTheme: '',
+    tops: '', bottoms: '', bg: '', angle: '', bgText: '', global: ''
+  });
+
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [isCopied, setIsCopied] = useState(false);
+
+  // Gemini API states
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generatedImage, setGeneratedImage] = useState(null);
+  const [genError, setGenError] = useState('');
+  const [imageHistory, setImageHistory] = useState([]);
+
+  // Save API key
+  useEffect(() => {
+    if (apiKey) localStorage.setItem('gemini_api_key', apiKey);
+  }, [apiKey]);
+
+  const updateCustomInput = (key, value) => {
+    setCustomInputs(prev => ({ ...prev, [key]: value }));
+  };
+
+  // プロンプト生成
+  useEffect(() => {
+    const getVal = (opts, id) => (opts.find(o => o.id === id) || {}).value || '';
+    const combine = (opts, id, custom) => {
+      const sv = getVal(opts, id);
+      if (sv && custom.trim()) return `${sv}, ${custom.trim()}`;
+      if (custom.trim()) return custom.trim();
+      return sv;
+    };
+
+    const hairPart = [
+      combine(HAIR_COLOR_OPTIONS, selectedHairColor, customInputs.hairColor),
+      combine(HAIR_OPTIONS, selectedHair, customInputs.hair)
+    ].filter(p => p && p.trim()).join(' ');
+
+    const basePrompt = selectedSize === 'square' ? 'icon design' : 'character design, vertical composition';
+    const parts = [
+      combine(STYLE_OPTIONS, selectedStyle, customInputs.style),
+      basePrompt,
+      selectedAngle === 'full' ? 'full body shot' : combine(ANGLE_OPTIONS, selectedAngle, customInputs.angle),
+      combine(FACE_TASTE_OPTIONS, selectedFaceTaste, customInputs.faceTaste),
+      combine(ETHNICITY_OPTIONS, selectedEthnicity, customInputs.ethnicity),
+      combine(GENDER_OPTIONS, selectedGender, customInputs.gender),
+      hairPart,
+      combine(EYE_OPTIONS, selectedEye, customInputs.eye),
+      combine(EXPRES_OPTIONS, selectedExpres, customInputs.expres),
+      combine(FASHION_THEME_OPTIONS, selectedFashionTheme, customInputs.fashionTheme),
+      combine(TOPS_OPTIONS, selectedTops, customInputs.tops),
+      combine(BOTTOMS_OPTIONS, selectedBottoms, customInputs.bottoms),
+      combine(BG_OPTIONS, selectedBg, customInputs.bg),
+      customInputs.bgText.trim() ? `text "${customInputs.bgText.trim()}", logo text "${customInputs.bgText.trim()}", ${getVal(TEXT_POS_OPTIONS, selectedTextPos)}` : '',
+      customInputs.global.trim(),
+      'masterpiece, best quality, ultra detailed, solo',
+    ];
+    setGeneratedPrompt(parts.filter(p => p && p.trim()).join(', '));
+  }, [
+    selectedStyle, selectedSize, selectedGender, selectedEthnicity, selectedFaceTaste,
+    selectedHair, selectedHairColor, selectedEye, selectedExpres,
+    selectedFashionTheme, selectedTops, selectedBottoms,
+    selectedBg, selectedAngle, selectedTextPos, customInputs
+  ]);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(generatedPrompt).then(() => {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    }).catch(() => {
+      // fallback
+      const ta = document.createElement('textarea');
+      ta.value = generatedPrompt;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    });
+  };
+
+  // Gemini画像生成
+  const handleGenerate = async () => {
+    if (!apiKey.trim()) { setGenError('APIキーを入力してください'); return; }
+    setIsGenerating(true);
+    setGenError('');
+    setGeneratedImage(null);
+
+    const aspectRatio = (SIZE_OPTIONS.find(o => o.id === selectedSize) || {}).value || '1:1';
+
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-goog-api-key': apiKey.trim()
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `Generate an image: ${generatedPrompt}` }] }],
+            generationConfig: {
+              responseModalities: ['TEXT', 'IMAGE']
+            }
+          })
+        }
+      );
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error?.message || `API Error: ${res.status}`);
+      }
+
+      const data = await res.json();
+      const candidate = data.candidates?.[0];
+      if (!candidate) throw new Error('レスポンスが空です');
+
+      const imagePart = candidate.content?.parts?.find(p => p.inline_data);
+      if (!imagePart) throw new Error('画像が生成されませんでした。プロンプトを変更してみてください。');
+
+      const imgSrc = `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+      setGeneratedImage(imgSrc);
+      setImageHistory(prev => [imgSrc, ...prev].slice(0, 20));
+    } catch (err) {
+      setGenError(err.message || '画像生成に失敗しました');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // ダウンロード
+  const handleDownload = (imgSrc) => {
+    const link = document.createElement('a');
+    link.href = imgSrc;
+    link.download = `icon_${Date.now()}.png`;
+    link.click();
+  };
+
+  const handleRandom = () => {
+    const randomPick = (opts) => {
+      const valid = opts.filter(o => o.id !== 'none');
+      return valid.length ? valid[Math.floor(Math.random() * valid.length)].id : 'none';
+    };
+    setSelectedStyle(randomPick(STYLE_OPTIONS));
+    setSelectedGender(randomPick(GENDER_OPTIONS));
+    setSelectedEthnicity(Math.random() > 0.7 ? randomPick(ETHNICITY_OPTIONS) : 'none');
+    setSelectedFaceTaste(Math.random() > 0.5 ? randomPick(FACE_TASTE_OPTIONS) : 'none');
+    setSelectedHair(randomPick(HAIR_OPTIONS));
+    setSelectedHairColor(randomPick(HAIR_COLOR_OPTIONS));
+    setSelectedEye(randomPick(EYE_OPTIONS));
+    setSelectedExpres(randomPick(EXPRES_OPTIONS));
+    setSelectedFashionTheme(randomPick(FASHION_THEME_OPTIONS));
+    setSelectedTops(Math.random() > 0.5 ? randomPick(TOPS_OPTIONS) : 'none');
+    setSelectedBottoms(Math.random() > 0.5 ? randomPick(BOTTOMS_OPTIONS) : 'none');
+    setSelectedBg(randomPick(BG_OPTIONS));
+    setSelectedAngle(randomPick(ANGLE_OPTIONS));
+  };
+
+  const TABS = [
+    { id: 'style', label: '画風', icon: 'Palette' },
+    { id: 'character', label: 'キャラ', icon: 'User' },
+    { id: 'hairColor', label: '髪色', icon: 'Palette' },
+    { id: 'hair', label: '髪型', icon: 'Scissors' },
+    { id: 'eye', label: '目', icon: 'Sparkles' },
+    { id: 'expres', label: '表情', icon: 'Smile' },
+    { id: 'theme', label: '服テーマ', icon: 'Gem' },
+    { id: 'tops', label: 'トップス', icon: 'Shirt' },
+    { id: 'bottoms', label: 'ボトムス', icon: 'Footprints' },
+    { id: 'bg', label: '背景', icon: 'Image' },
+    { id: 'angle', label: '構図', icon: 'Monitor' },
+    { id: 'text', label: '文字', icon: 'Type' },
+    { id: 'custom', label: 'カスタム', icon: 'Pencil' },
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-100 font-sans text-gray-800 pb-24">
+      {/* Header */}
+      <header className="bg-gradient-to-r from-indigo-700 to-purple-700 text-white p-4 shadow-lg sticky top-0 z-20">
+        <div className="max-w-7xl mx-auto flex justify-between items-center gap-4">
+          <div>
+            <h1 className="text-lg sm:text-2xl font-bold flex items-center gap-2">
+              <LucideIcon name="Sparkles" size={24} className="text-yellow-300" />
+              SNSアイコンメーカー
+              <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full">Pro</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRandom}
+              className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-full text-xs sm:text-sm backdrop-blur-sm transition-colors border border-white/30"
+            >
+              <LucideIcon name="RefreshCw" size={14} />
+              ランダム
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-2 sm:p-4 flex flex-col lg:flex-row gap-4 mt-2">
+        {/* 左カラム: 設定 */}
+        <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col" style={{ height: 'calc(100vh - 140px)' }}>
+          <div className="flex border-b border-gray-200 overflow-x-auto no-scrollbar bg-gray-50">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-1.5 px-3 py-2 sm:py-3 text-[10px] sm:text-sm font-bold whitespace-nowrap border-b-2 transition-colors flex-shrink-0 min-w-[60px] sm:min-w-[80px] ${
+                  activeTab === tab.id
+                    ? 'border-indigo-500 text-indigo-700 bg-white'
+                    : 'border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <LucideIcon name={tab.icon} size={16} />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+            {activeTab === 'style' && (
+              <>
+                <SelectionSection title="画像サイズ" iconName="Move" options={SIZE_OPTIONS} selected={selectedSize} onChange={setSelectedSize} customValue={customInputs.size} onCustomChange={(v) => updateCustomInput('size', v)} gridCols="grid-cols-2" placeholder="例: 16:9, 2:3" />
+                <SelectionSection title="画風・アートスタイル" iconName="Palette" options={STYLE_OPTIONS} selected={selectedStyle} onChange={setSelectedStyle} customValue={customInputs.style} onCustomChange={(v) => updateCustomInput('style', v)} gridCols="grid-cols-2 lg:grid-cols-3" />
+              </>
+            )}
+            {activeTab === 'character' && (
+              <>
+                <SelectionSection title="性別・種族ベース" iconName="User" options={GENDER_OPTIONS} selected={selectedGender} onChange={setSelectedGender} customValue={customInputs.gender} onCustomChange={(v) => updateCustomInput('gender', v)} />
+                <SelectionSection title="人種・肌のトーン" iconName="Globe" options={ETHNICITY_OPTIONS} selected={selectedEthnicity} onChange={setSelectedEthnicity} customValue={customInputs.ethnicity} onCustomChange={(v) => updateCustomInput('ethnicity', v)} gridCols="grid-cols-2 sm:grid-cols-4" />
+                <SelectionSection title="顔の系統" iconName="UserCheck" options={FACE_TASTE_OPTIONS} selected={selectedFaceTaste} onChange={setSelectedFaceTaste} customValue={customInputs.faceTaste} onCustomChange={(v) => updateCustomInput('faceTaste', v)} gridCols="grid-cols-2 sm:grid-cols-3" />
+              </>
+            )}
+            {activeTab === 'hairColor' && (
+              <SelectionSection title="髪色" iconName="Palette" options={HAIR_COLOR_OPTIONS} selected={selectedHairColor} onChange={setSelectedHairColor} customValue={customInputs.hairColor} onCustomChange={(v) => updateCustomInput('hairColor', v)} gridCols="grid-cols-3 sm:grid-cols-4" />
+            )}
+            {activeTab === 'hair' && (
+              <SelectionSection title="髪型" iconName="Scissors" options={HAIR_OPTIONS} selected={selectedHair} onChange={setSelectedHair} customValue={customInputs.hair} onCustomChange={(v) => updateCustomInput('hair', v)} gridCols="grid-cols-2 sm:grid-cols-3" />
+            )}
+            {activeTab === 'eye' && (
+              <SelectionSection title="目の色・特徴" iconName="Sparkles" options={EYE_OPTIONS} selected={selectedEye} onChange={setSelectedEye} customValue={customInputs.eye} onCustomChange={(v) => updateCustomInput('eye', v)} gridCols="grid-cols-3 sm:grid-cols-4" />
+            )}
+            {activeTab === 'expres' && (
+              <SelectionSection title="表情" iconName="Smile" options={EXPRES_OPTIONS} selected={selectedExpres} onChange={setSelectedExpres} customValue={customInputs.expres} onCustomChange={(v) => updateCustomInput('expres', v)} gridCols="grid-cols-2 sm:grid-cols-3" />
+            )}
+            {activeTab === 'theme' && (
+              <SelectionSection title="ファッションテーマ" iconName="Gem" options={FASHION_THEME_OPTIONS} selected={selectedFashionTheme} onChange={setSelectedFashionTheme} customValue={customInputs.fashionTheme} onCustomChange={(v) => updateCustomInput('fashionTheme', v)} gridCols="grid-cols-2 sm:grid-cols-3" />
+            )}
+            {activeTab === 'tops' && (
+              <SelectionSection title="トップス" iconName="Shirt" options={TOPS_OPTIONS} selected={selectedTops} onChange={setSelectedTops} customValue={customInputs.tops} onCustomChange={(v) => updateCustomInput('tops', v)} />
+            )}
+            {activeTab === 'bottoms' && (
+              <SelectionSection title="ボトムス" iconName="Footprints" options={BOTTOMS_OPTIONS} selected={selectedBottoms} onChange={setSelectedBottoms} customValue={customInputs.bottoms} onCustomChange={(v) => updateCustomInput('bottoms', v)} />
+            )}
+            {activeTab === 'bg' && (
+              <SelectionSection title="背景" iconName="Image" options={BG_OPTIONS} selected={selectedBg} onChange={setSelectedBg} customValue={customInputs.bg} onCustomChange={(v) => updateCustomInput('bg', v)} />
+            )}
+            {activeTab === 'angle' && (
+              <SelectionSection title="アングル（構図）" iconName="Monitor" options={ANGLE_OPTIONS} selected={selectedAngle} onChange={setSelectedAngle} customValue={customInputs.angle} onCustomChange={(v) => updateCustomInput('angle', v)} gridCols="grid-cols-3" />
+            )}
+            {activeTab === 'text' && (
+              <div>
+                <div className="mb-6 bg-indigo-50 p-6 rounded-lg border border-indigo-100">
+                  <h3 className="flex items-center gap-2 text-md font-bold text-indigo-800 mb-4">
+                    <LucideIcon name="Type" size={18} />
+                    文字・ロゴ設定
+                  </h3>
+                  <div className="mb-4">
+                    <label className="block text-xs font-bold text-indigo-600 mb-1">背景に入れるテキスト</label>
+                    <input type="text" value={customInputs.bgText} onChange={(e) => updateCustomInput('bgText', e.target.value)} placeholder="例: HELLO, 2025, MY NAME" className="w-full p-3 rounded-lg border border-indigo-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition-all" />
+                    <p className="text-xs text-indigo-400 mt-1">※AIは文字生成が苦手な場合があります。</p>
+                  </div>
+                  <div className={`transition-all duration-300 ${customInputs.bgText.trim() ? 'opacity-100' : 'opacity-50 grayscale pointer-events-none'}`}>
+                    <label className="block text-xs font-bold text-indigo-600 mb-2">テキストの位置</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {TEXT_POS_OPTIONS.map((pos) => (
+                        <button key={pos.id} onClick={() => setSelectedTextPos(pos.id)}
+                          className={`px-2 py-3 text-xs rounded-lg border transition-all flex flex-col items-center justify-center gap-1 ${
+                            selectedTextPos === pos.id
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-md'
+                              : 'bg-white border-indigo-200 text-indigo-600 hover:bg-indigo-50'
+                          }`}
+                        >
+                          <LucideIcon name="Move" size={14} className={selectedTextPos === pos.id ? 'text-white' : 'text-indigo-400'} />
+                          {pos.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            {activeTab === 'custom' && (
+              <div>
+                <div className="mb-6">
+                  <h3 className="flex items-center gap-2 text-md font-bold text-gray-700 mb-2">
+                    <span className="text-indigo-500"><LucideIcon name="Pencil" size={18} /></span>
+                    全体への追加プロンプト
+                  </h3>
+                  <p className="text-sm text-gray-500 mb-3">
+                    ここに入力した内容はプロンプトの最後に追加されます。<br/>
+                    すべて「指定なし」にしてここだけ入力することも可能です。
+                  </p>
+                  <textarea
+                    value={customInputs.global}
+                    onChange={(e) => updateCustomInput('global', e.target.value)}
+                    placeholder="例: detailed cyberpunk city background, holding a sword, cherry blossoms falling..."
+                    className="w-full h-64 p-4 rounded-lg border-2 border-gray-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all outline-none resize-none font-mono text-sm"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 右カラム: 結果 + 画像生成 */}
+        <div className="lg:w-96 flex-shrink-0 flex flex-col gap-4" style={{ height: 'calc(100vh - 140px)' }}>
+          {/* APIキー */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+            <label className="block text-xs font-bold text-gray-600 mb-2 flex items-center gap-1">
+              <LucideIcon name="Key" size={14} />
+              Gemini APIキー
+            </label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="AIzaSy..."
+              className="w-full p-2 rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm transition-all font-mono"
+            />
+            <p className="text-[10px] text-gray-400 mt-1">※ ブラウザに保存されます（外部送信なし）</p>
+          </div>
+
+          {/* プロンプト + 生成ボタン */}
+          <div className="bg-white rounded-xl shadow-lg border border-purple-100 overflow-hidden flex flex-col flex-1 min-h-0">
+            <div className="bg-purple-50 p-3 border-b border-purple-100 flex-shrink-0">
+              <h2 className="font-bold text-purple-900 flex items-center gap-2 text-sm">
+                <LucideIcon name="Sparkles" size={16} />
+                完成プロンプト
+              </h2>
+            </div>
+
+            <div className="p-3 flex flex-col flex-1 min-h-0 gap-3">
+              <textarea
+                className="w-full p-3 text-xs border border-gray-200 rounded-lg bg-gray-50 focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none font-mono leading-relaxed custom-scrollbar"
+                style={{ minHeight: '80px', maxHeight: '120px' }}
+                readOnly
+                value={generatedPrompt}
+              />
+
+              <div className="flex gap-2">
+                <button onClick={handleCopy}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-white text-sm transition-all ${
+                    isCopied ? 'bg-green-500 shadow-green-200 shadow-lg' : 'bg-gray-500 hover:bg-gray-600 shadow-sm'
+                  }`}
+                >
+                  <LucideIcon name={isCopied ? 'Check' : 'Copy'} size={16} />
+                  {isCopied ? 'コピー完了' : 'コピー'}
+                </button>
+                <button onClick={handleGenerate} disabled={isGenerating}
+                  className={`flex-[2] flex items-center justify-center gap-2 py-2.5 rounded-lg font-bold text-white text-sm transition-all ${
+                    isGenerating
+                      ? 'bg-indigo-400 cursor-not-allowed'
+                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200 shadow-lg hover:-translate-y-0.5'
+                  }`}
+                >
+                  {isGenerating ? (
+                    <>
+                      <span className="animate-spin inline-block"><LucideIcon name="Loader2" size={16} /></span>
+                      生成中...
+                    </>
+                  ) : (
+                    <>
+                      <LucideIcon name="Wand2" size={16} />
+                      画像を生成
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {genError && (
+                <div className="bg-red-50 border border-red-200 text-red-600 text-xs p-3 rounded-lg">
+                  {genError}
+                </div>
+              )}
+
+              {/* 画像表示 */}
+              <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
+                {isGenerating && !generatedImage && (
+                  <div className="flex flex-col items-center justify-center h-48 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                    <span className="animate-spin mb-3"><LucideIcon name="Loader2" size={32} className="text-indigo-400" /></span>
+                    <p className="text-sm text-gray-500 animate-pulse">AIが画像を生成しています...</p>
+                    <p className="text-xs text-gray-400 mt-1">数十秒かかることがあります</p>
+                  </div>
+                )}
+
+                {generatedImage && (
+                  <div className="space-y-2">
+                    <div className="relative group">
+                      <img src={generatedImage} alt="Generated Icon" className="w-full rounded-lg shadow-md border border-gray-200" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100">
+                        <button onClick={() => handleDownload(generatedImage)} className="bg-white/90 hover:bg-white text-gray-800 px-4 py-2 rounded-lg shadow-lg text-sm font-bold flex items-center gap-2">
+                          <LucideIcon name="Download" size={16} />
+                          ダウンロード
+                        </button>
+                      </div>
+                    </div>
+                    <button onClick={() => handleDownload(generatedImage)}
+                      className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-green-500 hover:bg-green-600 text-white font-bold text-sm transition-all"
+                    >
+                      <LucideIcon name="Download" size={16} />
+                      画像を保存
+                    </button>
+                  </div>
+                )}
+
+                {/* 履歴 */}
+                {imageHistory.length > 1 && (
+                  <div className="mt-4">
+                    <h4 className="text-xs font-bold text-gray-500 mb-2 flex items-center gap-1">
+                      <LucideIcon name="History" size={12} />
+                      生成履歴
+                    </h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      {imageHistory.slice(1).map((img, i) => (
+                        <div key={i} className="relative group cursor-pointer" onClick={() => { setGeneratedImage(img); }}>
+                          <img src={img} alt={`History ${i+1}`} className="w-full rounded-md border border-gray-200 hover:border-indigo-400 transition-all" />
+                          <button onClick={(e) => { e.stopPropagation(); handleDownload(img); }}
+                            className="absolute bottom-1 right-1 bg-white/80 rounded p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <LucideIcon name="Download" size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!generatedImage && !isGenerating && (
+                  <div className="flex flex-col items-center justify-center h-48 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200 text-gray-400">
+                    <LucideIcon name="ImagePlus" size={40} className="text-gray-300 mb-2" />
+                    <p className="text-sm">設定を選んで「画像を生成」をクリック</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-[10px] text-gray-400 text-center flex-shrink-0 pt-2 border-t border-gray-100">
+                Gemini API (gemini-3.1-flash-image-preview) で画像生成
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
