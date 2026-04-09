@@ -280,6 +280,7 @@ function App() {
   const [imageHistory, setImageHistory] = useState([]);
   const [showPrompt, setShowPrompt] = useState(false);
   const [basePromptForVariation, setBasePromptForVariation] = useState('');
+  const [baseImageForVariation, setBaseImageForVariation] = useState(null);
   const [variationGenerating, setVariationGenerating] = useState('');
 
   const updateSel = (key, val) => setSel(p => ({ ...p, [key]: val }));
@@ -349,6 +350,7 @@ function App() {
       setGeneratedImage(src);
       setImageHistory(prev => [src, ...prev].slice(0, 20));
       setBasePromptForVariation(prompt);
+      setBaseImageForVariation({ mimeType: imgPart.inlineData.mimeType, data: imgPart.inlineData.data });
     } catch (err) {
       setGenError(err.message || '画像生成に失敗しました');
     } finally { setIsGenerating(false); }
@@ -376,7 +378,7 @@ function App() {
   ];
 
   const handleExpressionVariation = async (expr) => {
-    if (!apiKey.trim() || !basePromptForVariation) return;
+    if (!apiKey.trim() || !basePromptForVariation || !baseImageForVariation) return;
     setVariationGenerating(expr.id);
     setGenError('');
 
@@ -399,7 +401,10 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `Generate an image based on this description. Output ONLY the image. Keep the same character design but change the expression: ${modifiedPrompt}` }] }],
+            contents: [{ parts: [
+              { inlineData: { mimeType: baseImageForVariation.mimeType, data: baseImageForVariation.data } },
+              { text: `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Output ONLY the image. Additional context: ${modifiedPrompt}` }
+            ] }],
             generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
           })
         }
