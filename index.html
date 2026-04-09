@@ -483,16 +483,16 @@ function App() {
       }
 
       const parts = candidate.content?.parts || [];
-      console.log('Parts count:', parts.length, 'Types:', parts.map(p => p.inline_data ? `image(${p.inline_data.mime_type})` : p.text ? 'text' : 'unknown'));
+      console.log('Parts count:', parts.length, 'Types:', parts.map(p => p.inlineData ? `image(${p.inlineData.mime_type})` : p.text ? 'text' : 'unknown'));
 
-      const imagePart = parts.find(p => p.inline_data);
+      const imagePart = parts.find(p => p.inlineData);
       if (!imagePart) {
         const textPart = parts.find(p => p.text);
         const hint = textPart ? `\nAIの応答: ${textPart.text.slice(0, 200)}` : '';
         throw new Error(`画像が生成されませんでした。${hint}\nプロンプトを変更して再試行してください。`);
       }
 
-      const imgSrc = `data:${imagePart.inline_data.mime_type};base64,${imagePart.inline_data.data}`;
+      const imgSrc = `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`;
       setGeneratedImage(imgSrc);
       setImageHistory(prev => [imgSrc, ...prev].slice(0, 20));
     } catch (err) {
