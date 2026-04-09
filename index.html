@@ -279,6 +279,8 @@ function App() {
   const [genError, setGenError] = useState('');
   const [imageHistory, setImageHistory] = useState([]);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [basePromptForVariation, setBasePromptForVariation] = useState('');
+  const [variationGenerating, setVariationGenerating] = useState('');
 
   const updateSel = (key, val) => setSel(p => ({ ...p, [key]: val }));
   const updateCustom = (key, val) => setCustom(p => ({ ...p, [key]: val }));
@@ -346,6 +348,7 @@ function App() {
       const src = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
       setGeneratedImage(src);
       setImageHistory(prev => [src, ...prev].slice(0, 20));
+      setBasePromptForVariation(prompt);
     } catch (err) {
       setGenError(err.message || '画像生成に失敗しました');
     } finally { setIsGenerating(false); }
@@ -354,6 +357,67 @@ function App() {
   const handleDownload = (src) => {
     const a = document.createElement('a');
     a.href = src; a.download = `icon_${Date.now()}.png`; a.click();
+  };
+
+  // 表情バリエーション
+  const EXPRESSION_VARIATIONS = [
+    { id: 'smile', label: '😊 笑顔', value: 'gentle smile, happy expression' },
+    { id: 'laugh', label: '😆 大笑い', value: 'laughing, excited, open mouth, energetic' },
+    { id: 'cool', label: '😎 クール', value: 'expressionless, cool vibe, mysterious' },
+    { id: 'wink', label: '😉 ウインク', value: 'winking, playful expression' },
+    { id: 'angry', label: '😠 怒り', value: 'angry face, annoyed, furrowed brows' },
+    { id: 'sad', label: '😢 泣き', value: 'crying, tears, sad expression' },
+    { id: 'surprised', label: '😲 驚き', value: 'surprised, open mouth, wide eyes' },
+    { id: 'blush', label: '😳 赤面', value: 'blushing, shy, embarrassed, flustered' },
+    { id: 'smug', label: '😏 ドヤ顔', value: 'smug face, confident, half-closed eyes' },
+    { id: 'peace', label: '✌️ ピース', value: 'peace sign, cheerful, cute pose' },
+    { id: 'think', label: '🤔 考え中', value: 'thinking, hand on chin, pondering' },
+    { id: 'sleep', label: '😴 眠い', value: 'sleepy, drowsy, closed eyes, zzz' },
+  ];
+
+  const handleExpressionVariation = async (expr) => {
+    if (!apiKey.trim() || !basePromptForVariation) return;
+    setVariationGenerating(expr.id);
+    setGenError('');
+
+    // 既存の表情部分を除去して新しい表情に差し替え
+    const allExprValues = EXPRES_OPTIONS.filter(o => o.id !== 'none').map(o => o.value);
+    const allVarValues = EXPRESSION_VARIATIONS.map(o => o.value);
+    let modifiedPrompt = basePromptForVariation;
+    [...allExprValues, ...allVarValues].forEach(ev => {
+      ev.split(', ').forEach(part => {
+        modifiedPrompt = modifiedPrompt.replace(new RegExp(',?\\s*' + part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*,?', 'gi'), ', ');
+      });
+    });
+    modifiedPrompt = modifiedPrompt.replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '');
+    modifiedPrompt += `, ${expr.value}`;
+
+    try {
+      const res = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `Generate an image based on this description. Output ONLY the image. Keep the same character design but change the expression: ${modifiedPrompt}` }] }],
+            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+          })
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error?.message || `API Error: ${res.status}`);
+      const cand = data.candidates?.[0];
+      if (!cand) throw new Error('レスポンスが空です');
+      if (cand.finishReason === 'SAFETY' || cand.finishReason === 'IMAGE_SAFETY')
+        throw new Error('安全フィルターによりブロックされました');
+      const imgPart = (cand.content?.parts || []).find(p => p.inlineData);
+      if (!imgPart) throw new Error('画像が生成されませんでした');
+      const src = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
+      setGeneratedImage(src);
+      setImageHistory(prev => [src, ...prev].slice(0, 20));
+    } catch (err) {
+      setGenError(err.message || '表情バリエーション生成に失敗しました');
+    } finally { setVariationGenerating(''); }
   };
 
   const handleRandom = () => {
@@ -562,6 +626,33 @@ function App() {
 
               {genError && (
                 <div className="mx-3 mb-3 bg-red-50 border border-red-200 text-red-600 text-xs p-3 rounded-lg whitespace-pre-wrap">{genError}</div>
+              )}
+
+              {/* 表情バリエーション */}
+              {generatedImage && !isGenerating && basePromptForVariation && (
+                <div className="px-3 pb-3 border-t border-gray-100 pt-3 fade-in">
+                  <h4 className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5">
+                    <Icon name="Smile" size={14} className="text-brand-500" />
+                    表情バリエーション
+                    <span className="text-[10px] font-normal text-gray-400">同じキャラで表情だけ変更</span>
+                  </h4>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {EXPRESSION_VARIATIONS.map(expr => (
+                      <button key={expr.id} onClick={() => handleExpressionVariation(expr)}
+                        disabled={!!variationGenerating}
+                        className={`px-1.5 py-2 rounded-lg text-[11px] font-medium transition-all border ${
+                          variationGenerating === expr.id
+                            ? 'bg-brand-100 border-brand-300 text-brand-600 animate-pulse2'
+                            : variationGenerating
+                              ? 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed'
+                              : 'bg-white border-gray-200 text-gray-600 hover:border-brand-300 hover:bg-brand-50 hover:text-brand-600'
+                        }`}
+                      >
+                        {variationGenerating === expr.id ? '...' : expr.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
 
