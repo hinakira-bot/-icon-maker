@@ -175,6 +175,9 @@ const TOPS_OPTIONS = [
   { id: 'kimono', label: '着物', value: 'wearing a kimono, japanese traditional clothes' }, { id: 'armor', label: '鎧', value: 'wearing fantasy armor, metallic details' },
   { id: 'tech', label: 'テック', value: 'wearing techwear, futuristic gear' }, { id: 'jersey', label: 'ジャージ', value: 'wearing a track suit, jersey' },
   { id: 'suit', label: 'スーツ', value: 'wearing a formal suit and tie' }, { id: 'bikini', label: '水着', value: 'wearing a bikini, swimwear' },
+  { id: 'lingerie', label: 'ランジェリー', value: 'wearing lingerie, lace underwear' },
+  { id: 'towel', label: 'タオル', value: 'wrapped in a towel, bath scene' },
+  { id: 'nude', label: '裸体', value: 'nude, bare skin, no clothes, artistic nude' },
 ];
 
 const BOTTOMS_OPTIONS = [
@@ -327,8 +330,14 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `Generate an image based on this description. Output ONLY the image.${custom.bgText.trim() ? '' : ' Do NOT include any text, letters, words, numbers, watermarks, or logos in the image.'} ${prompt}` }] }],
-            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+            contents: [{ parts: [{ text: `Generate an image strictly following ALL details in this description. Do not add, remove, or change any clothing or accessory unless specified. Follow the prompt exactly as written. Output ONLY the image.${custom.bgText.trim() ? '' : ' Do NOT include any text, letters, words, numbers, watermarks, or logos in the image.'} ${prompt}` }] }],
+            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+            safetySettings: [
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            ]
           })
         }
       );
@@ -405,7 +414,13 @@ function App() {
               { inlineData: { mimeType: baseImageForVariation.mimeType, data: baseImageForVariation.data } },
               { text: `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Do NOT include any text, letters, words, numbers, watermarks, or logos in the image. Output ONLY the image. Additional context: ${modifiedPrompt}` }
             ] }],
-            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
+            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+            safetySettings: [
+              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+            ]
           })
         }
       );
