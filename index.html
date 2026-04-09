@@ -327,7 +327,7 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
           body: JSON.stringify({
-            contents: [{ parts: [{ text: `Generate an image based on this description. Output ONLY the image: ${prompt}` }] }],
+            contents: [{ parts: [{ text: `Generate an image based on this description. Output ONLY the image.${custom.bgText.trim() ? '' : ' Do NOT include any text, letters, words, numbers, watermarks, or logos in the image.'} ${prompt}` }] }],
             generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
           })
         }
@@ -403,7 +403,7 @@ function App() {
           body: JSON.stringify({
             contents: [{ parts: [
               { inlineData: { mimeType: baseImageForVariation.mimeType, data: baseImageForVariation.data } },
-              { text: `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Output ONLY the image. Additional context: ${modifiedPrompt}` }
+              { text: `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Do NOT include any text, letters, words, numbers, watermarks, or logos in the image. Output ONLY the image. Additional context: ${modifiedPrompt}` }
             ] }],
             generationConfig: { responseModalities: ['IMAGE', 'TEXT'] }
           })
