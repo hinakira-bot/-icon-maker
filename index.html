@@ -330,8 +330,8 @@ function App() {
 
   const handleGenerate = async () => {
     if (!currentKey.trim()) {
-      setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーを「その他」タブで設定してください`);
-      setActiveTab('extra');
+      setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーをヘッダーで入力してください`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     setIsGenerating(true); setGenError(''); setGeneratedImage(null);
@@ -385,8 +385,8 @@ function App() {
   const handleExpressionVariation = async (expr) => {
     if (!basePromptForVariation || !baseImageForVariation) return;
     if (!currentKey.trim()) {
-      setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーを「その他」タブで設定してください`);
-      setActiveTab('extra');
+      setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーをヘッダーで入力してください`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     setVariationGenerating(expr.id);
@@ -477,9 +477,49 @@ function App() {
                 GPT-Image-2
               </button>
             </div>
+
+            {/* APIキー入力（ヘッダー直配置） */}
+            <div className="hidden md:flex items-center gap-1.5 bg-white/10 rounded-full pl-3 pr-1 py-0.5 border border-white/20 w-72">
+              <Icon name="Key" size={12} className="text-white/60 flex-shrink-0" />
+              {provider === 'gemini' ? (
+                <input key="gemini-input" type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}
+                  placeholder="Gemini APIキー (AIzaSy...)" autoComplete="off"
+                  className="flex-1 bg-transparent text-white placeholder-white/40 text-xs outline-none font-mono py-1" />
+              ) : (
+                <input key="openai-input" type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)}
+                  placeholder="OpenAI APIキー (sk-...)" autoComplete="off"
+                  className="flex-1 bg-transparent text-white placeholder-white/40 text-xs outline-none font-mono py-1" />
+              )}
+              <a href={provider === 'gemini' ? 'https://aistudio.google.com/app/apikey' : 'https://platform.openai.com/api-keys'}
+                target="_blank" rel="noopener"
+                className="flex items-center justify-center w-6 h-6 rounded-full bg-white/10 hover:bg-white/20 text-white/70 hover:text-white transition-colors flex-shrink-0"
+                title="APIキー取得ページを開く"
+              ><Icon name="ExternalLink" size={11} /></a>
+            </div>
+
             <button onClick={handleRandom}
               className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full text-xs font-medium border border-white/20 transition-colors"
             ><Icon name="Shuffle" size={14} />ランダム</button>
+          </div>
+        </div>
+
+        {/* モバイル用APIキー */}
+        <div className="md:hidden mt-2 max-w-7xl mx-auto">
+          <div className="flex items-center gap-1.5 bg-white/10 rounded-lg pl-3 pr-1 py-0.5 border border-white/20">
+            <Icon name="Key" size={12} className="text-white/60 flex-shrink-0" />
+            {provider === 'gemini' ? (
+              <input key="gemini-mobile" type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}
+                placeholder="Gemini APIキー" autoComplete="off"
+                className="flex-1 bg-transparent text-white placeholder-white/40 text-xs outline-none font-mono py-1.5" />
+            ) : (
+              <input key="openai-mobile" type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)}
+                placeholder="OpenAI APIキー" autoComplete="off"
+                className="flex-1 bg-transparent text-white placeholder-white/40 text-xs outline-none font-mono py-1.5" />
+            )}
+            <a href={provider === 'gemini' ? 'https://aistudio.google.com/app/apikey' : 'https://platform.openai.com/api-keys'}
+              target="_blank" rel="noopener"
+              className="flex items-center justify-center w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white/70 transition-colors flex-shrink-0"
+            ><Icon name="ExternalLink" size={11} /></a>
           </div>
         </div>
       </header>
@@ -563,64 +603,22 @@ function App() {
             )}
             {activeTab === 'extra' && (
               <>
-                <Section title="APIキー設定" iconName="Key">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-[11px] text-blue-800 mb-3 flex gap-2">
-                    <Icon name="ShieldCheck" size={14} className="flex-shrink-0 mt-0.5" />
-                    <div>
-                      APIキーは <strong>あなたのブラウザのみ</strong> に保存され、外部サーバーには保存されません。各自で取得してください。
+                {provider === 'openai' && (
+                  <Section title="GPT-Image-2 品質" iconName="Sliders">
+                    <div className="flex gap-1.5">
+                      {['low', 'medium', 'high', 'auto'].map(q => (
+                        <button key={q} onClick={() => setOpenaiQuality(q)}
+                          className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-all border capitalize ${
+                            openaiQuality === q
+                              ? 'bg-brand-500 text-white border-brand-500'
+                              : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'
+                          }`}
+                        >{q}</button>
+                      ))}
                     </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-gray-600 flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
-                        Gemini APIキー
-                      </label>
-                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" className="text-[10px] text-brand-500 hover:underline flex items-center gap-0.5">
-                        取得 <Icon name="ExternalLink" size={10} />
-                      </a>
-                    </div>
-                    <input type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}
-                      placeholder="AIzaSy..." autoComplete="off"
-                      className="w-full p-2 rounded-lg border border-gray-200 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-xs font-mono transition-all" />
-                    <p className="text-[10px] text-gray-400 mt-1">無料枠あり・Geminiモデル使用</p>
-                  </div>
-
-                  <div className="mb-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-gray-600 flex items-center gap-1">
-                        <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
-                        OpenAI APIキー
-                      </label>
-                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-[10px] text-brand-500 hover:underline flex items-center gap-0.5">
-                        取得 <Icon name="ExternalLink" size={10} />
-                      </a>
-                    </div>
-                    <input type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)}
-                      placeholder="sk-..." autoComplete="off"
-                      className="w-full p-2 rounded-lg border border-gray-200 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-xs font-mono transition-all" />
-                    <p className="text-[10px] text-gray-400 mt-1">有料・GPT-Image-2モデル使用</p>
-                  </div>
-
-                  {provider === 'openai' && (
-                    <div className="mt-3 pt-3 border-t border-gray-100">
-                      <label className="block text-xs font-bold text-gray-600 mb-1.5">GPT-Image-2 品質</label>
-                      <div className="flex gap-1.5">
-                        {['low', 'medium', 'high', 'auto'].map(q => (
-                          <button key={q} onClick={() => setOpenaiQuality(q)}
-                            className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-all border ${
-                              openaiQuality === q
-                                ? 'bg-brand-500 text-white border-brand-500'
-                                : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'
-                            }`}
-                          >{q}</button>
-                        ))}
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-1">高品質ほど時間と料金がかかります</p>
-                    </div>
-                  )}
-                </Section>
+                    <p className="text-[10px] text-gray-400 mt-1.5">高品質ほど時間と料金がかかります</p>
+                  </Section>
+                )}
                 <Section title="文字・ロゴ" iconName="Type">
                   <input type="text" value={custom.bgText} onChange={(e) => updateCustom('bgText', e.target.value)}
                     placeholder="例: HELLO, 2025, MY NAME" className="w-full p-2.5 rounded-lg border border-gray-200 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-sm transition-all mb-2" />
