@@ -328,6 +328,66 @@ function App() {
 
   const currentKey = provider === 'openai' ? openaiKey : geminiKey;
 
+  const callGeminiDirect = async (fullPrompt, refImage) => {
+    const parts = [];
+    if (refImage) {
+      const m = refImage.match(/^data:(image\/[^;]+);base64,(.+)$/);
+      if (m) parts.push({ inlineData: { mimeType: m[1], data: m[2] } });
+    }
+    parts.push({ text: fullPrompt });
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey.trim() },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          ],
+        }),
+      }
+    );
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || `Gemini API Error: ${res.status}`);
+    const cand = data.candidates?.[0];
+    if (!cand) {
+      const br = data.promptFeedback?.blockReason;
+      throw new Error(br ? `ブロックされました: ${br}` : 'レスポンスが空です');
+    }
+    if (cand.finishReason === 'SAFETY' || cand.finishReason === 'IMAGE_SAFETY')
+      throw new Error('安全フィルターによりブロックされました');
+    const imgPart = (cand.content?.parts || []).find(p => p.inlineData);
+    if (!imgPart) {
+      const txt = (cand.content?.parts || []).find(p => p.text);
+      throw new Error(`画像が生成されませんでした${txt ? '\nAI: ' + txt.text.slice(0, 150) : ''}`);
+    }
+    return {
+      image: `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`,
+      mimeType: imgPart.inlineData.mimeType,
+      data: imgPart.inlineData.data,
+    };
+  };
+
+  const callOpenAIProxy = async (fullPrompt, refImage) => {
+    const body = { model: 'gpt-image-2', prompt: fullPrompt, size: '1024x1024', quality: openaiQuality };
+    if (refImage) { body.mode = 'edit'; body.referenceImage = refImage; }
+    const res = await fetch('/api/openai-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': openaiKey.trim() },
+      body: JSON.stringify(body),
+    }).catch(e => {
+      throw new Error('プロキシに到達できません。Vercelにデプロイ後にOpenAI機能が使えます。\n(' + e.message + ')');
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `API Error: ${res.status}`);
+    return data;
+  };
+
   const handleGenerate = async () => {
     if (!currentKey.trim()) {
       setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーをヘッダーで入力してください`);
@@ -339,18 +399,9 @@ function App() {
     const fullPrompt = `Generate an image strictly following ALL details in this description. Do not add, remove, or change any clothing or accessory unless specified. Follow the prompt exactly as written. Output ONLY the image.${noTextHint} ${prompt}`;
 
     try {
-      const endpoint = provider === 'openai' ? '/api/openai-image' : '/api/gemini-image';
-      const body = provider === 'openai'
-        ? { model: 'gpt-image-2', prompt: fullPrompt, size: '1024x1024', quality: openaiQuality }
-        : { prompt: fullPrompt };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Api-Key': currentKey.trim() },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `API Error: ${res.status}`);
+      const data = provider === 'openai'
+        ? await callOpenAIProxy(fullPrompt, null)
+        : await callGeminiDirect(fullPrompt, null);
 
       setGeneratedImage(data.image);
       setImageHistory(prev => [data.image, ...prev].slice(0, 20));
@@ -406,18 +457,9 @@ function App() {
     const editPrompt = `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Do NOT include any text, letters, words, numbers, watermarks, or logos in the image. Output ONLY the image. Additional context: ${modifiedPrompt}`;
 
     try {
-      const endpoint = provider === 'openai' ? '/api/openai-image' : '/api/gemini-image';
-      const body = provider === 'openai'
-        ? { model: 'gpt-image-2', prompt: editPrompt, size: '1024x1024', quality: openaiQuality, mode: 'edit', referenceImage: baseImageForVariation.dataUrl }
-        : { prompt: editPrompt, referenceImage: baseImageForVariation.dataUrl };
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Api-Key': currentKey.trim() },
-        body: JSON.stringify(body),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || `API Error: ${res.status}`);
+      const data = provider === 'openai'
+        ? await callOpenAIProxy(editPrompt, baseImageForVariation.dataUrl)
+        : await callGeminiDirect(editPrompt, baseImageForVariation.dataUrl);
 
       setGeneratedImage(data.image);
       setImageHistory(prev => [data.image, ...prev].slice(0, 20));
