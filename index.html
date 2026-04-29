@@ -276,7 +276,8 @@ function App() {
   });
   const [prompt, setPrompt] = useState('');
   const [isCopied, setIsCopied] = useState(false);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  const [provider, setProvider] = useState(() => localStorage.getItem('image_provider') || 'gemini');
+  const [openaiQuality, setOpenaiQuality] = useState(() => localStorage.getItem('openai_quality') || 'high');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState(null);
   const [genError, setGenError] = useState('');
@@ -289,7 +290,8 @@ function App() {
   const updateSel = (key, val) => setSel(p => ({ ...p, [key]: val }));
   const updateCustom = (key, val) => setCustom(p => ({ ...p, [key]: val }));
 
-  useEffect(() => { if (apiKey) localStorage.setItem('gemini_api_key', apiKey); }, [apiKey]);
+  useEffect(() => { localStorage.setItem('image_provider', provider); }, [provider]);
+  useEffect(() => { localStorage.setItem('openai_quality', openaiQuality); }, [openaiQuality]);
 
   // プロンプト生成
   useEffect(() => {
@@ -321,45 +323,28 @@ function App() {
   };
 
   const handleGenerate = async () => {
-    if (!apiKey.trim()) { setGenError('APIキーを入力してください'); return; }
     setIsGenerating(true); setGenError(''); setGeneratedImage(null);
+    const noTextHint = custom.bgText.trim() ? '' : ' Do NOT include any text, letters, words, numbers, watermarks, or logos in the image.';
+    const fullPrompt = `Generate an image strictly following ALL details in this description. Do not add, remove, or change any clothing or accessory unless specified. Follow the prompt exactly as written. Output ONLY the image.${noTextHint} ${prompt}`;
+
     try {
-      const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: `Generate an image strictly following ALL details in this description. Do not add, remove, or change any clothing or accessory unless specified. Follow the prompt exactly as written. Output ONLY the image.${custom.bgText.trim() ? '' : ' Do NOT include any text, letters, words, numbers, watermarks, or logos in the image.'} ${prompt}` }] }],
-            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
-            safetySettings: [
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            ]
-          })
-        }
-      );
+      const endpoint = provider === 'openai' ? '/api/openai-image' : '/api/gemini-image';
+      const body = provider === 'openai'
+        ? { model: 'gpt-image-2', prompt: fullPrompt, size: '1024x1024', quality: openaiQuality }
+        : { prompt: fullPrompt };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || `API Error: ${res.status}`);
-      const cand = data.candidates?.[0];
-      if (!cand) {
-        const br = data.promptFeedback?.blockReason;
-        throw new Error(br ? `ブロックされました: ${br}` : 'レスポンスが空です');
-      }
-      if (cand.finishReason === 'SAFETY' || cand.finishReason === 'IMAGE_SAFETY')
-        throw new Error('安全フィルターによりブロックされました。プロンプトを変更してください。');
-      const imgPart = (cand.content?.parts || []).find(p => p.inlineData);
-      if (!imgPart) {
-        const txt = (cand.content?.parts || []).find(p => p.text);
-        throw new Error(`画像が生成されませんでした。${txt ? '\nAI: ' + txt.text.slice(0, 150) : ''}`);
-      }
-      const src = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
-      setGeneratedImage(src);
-      setImageHistory(prev => [src, ...prev].slice(0, 20));
+      if (!res.ok) throw new Error(data?.error || `API Error: ${res.status}`);
+
+      setGeneratedImage(data.image);
+      setImageHistory(prev => [data.image, ...prev].slice(0, 20));
       setBasePromptForVariation(prompt);
-      setBaseImageForVariation({ mimeType: imgPart.inlineData.mimeType, data: imgPart.inlineData.data });
+      setBaseImageForVariation({ mimeType: data.mimeType, data: data.data, dataUrl: data.image });
     } catch (err) {
       setGenError(err.message || '画像生成に失敗しました');
     } finally { setIsGenerating(false); }
@@ -387,11 +372,10 @@ function App() {
   ];
 
   const handleExpressionVariation = async (expr) => {
-    if (!apiKey.trim() || !basePromptForVariation || !baseImageForVariation) return;
+    if (!basePromptForVariation || !baseImageForVariation) return;
     setVariationGenerating(expr.id);
     setGenError('');
 
-    // 既存の表情部分を除去して新しい表情に差し替え
     const allExprValues = EXPRES_OPTIONS.filter(o => o.id !== 'none').map(o => o.value);
     const allVarValues = EXPRESSION_VARIATIONS.map(o => o.value);
     let modifiedPrompt = basePromptForVariation;
@@ -403,38 +387,24 @@ function App() {
     modifiedPrompt = modifiedPrompt.replace(/,\s*,/g, ',').replace(/,\s*$/, '').replace(/^\s*,/, '');
     modifiedPrompt += `, ${expr.value}`;
 
+    const editPrompt = `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Do NOT include any text, letters, words, numbers, watermarks, or logos in the image. Output ONLY the image. Additional context: ${modifiedPrompt}`;
+
     try {
-      const res = await fetch(
-        'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey.trim() },
-          body: JSON.stringify({
-            contents: [{ parts: [
-              { inlineData: { mimeType: baseImageForVariation.mimeType, data: baseImageForVariation.data } },
-              { text: `This is the reference character image. Generate a new image of the EXACT SAME character (same art style, same clothing, same hair, same colors, same design) but change ONLY the facial expression to: ${expr.value}. Keep everything else identical. Do NOT include any text, letters, words, numbers, watermarks, or logos in the image. Output ONLY the image. Additional context: ${modifiedPrompt}` }
-            ] }],
-            generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
-            safetySettings: [
-              { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
-              { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
-            ]
-          })
-        }
-      );
+      const endpoint = provider === 'openai' ? '/api/openai-image' : '/api/gemini-image';
+      const body = provider === 'openai'
+        ? { model: 'gpt-image-2', prompt: editPrompt, size: '1024x1024', quality: openaiQuality, mode: 'edit', referenceImage: baseImageForVariation.dataUrl }
+        : { prompt: editPrompt, referenceImage: baseImageForVariation.dataUrl };
+
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error?.message || `API Error: ${res.status}`);
-      const cand = data.candidates?.[0];
-      if (!cand) throw new Error('レスポンスが空です');
-      if (cand.finishReason === 'SAFETY' || cand.finishReason === 'IMAGE_SAFETY')
-        throw new Error('安全フィルターによりブロックされました');
-      const imgPart = (cand.content?.parts || []).find(p => p.inlineData);
-      if (!imgPart) throw new Error('画像が生成されませんでした');
-      const src = `data:${imgPart.inlineData.mimeType};base64,${imgPart.inlineData.data}`;
-      setGeneratedImage(src);
-      setImageHistory(prev => [src, ...prev].slice(0, 20));
+      if (!res.ok) throw new Error(data?.error || `API Error: ${res.status}`);
+
+      setGeneratedImage(data.image);
+      setImageHistory(prev => [data.image, ...prev].slice(0, 20));
     } catch (err) {
       setGenError(err.message || '表情バリエーション生成に失敗しました');
     } finally { setVariationGenerating(''); }
@@ -472,11 +442,18 @@ function App() {
             <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full">Pro</span>
           </h1>
           <div className="flex items-center gap-2">
-            {/* APIキー */}
-            <div className="hidden sm:flex items-center gap-1 bg-white/10 rounded-full px-3 py-1 border border-white/20">
-              <Icon name="Key" size={12} className="text-white/60" />
-              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Gemini APIキー" className="bg-transparent text-white placeholder-white/40 text-xs w-40 outline-none" />
+            {/* プロバイダー切替 */}
+            <div className="flex items-center gap-0.5 bg-white/10 rounded-full p-0.5 border border-white/20">
+              <button onClick={() => setProvider('gemini')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  provider === 'gemini' ? 'bg-white text-brand-700 shadow' : 'text-white/70 hover:text-white'
+                }`}
+              >Gemini</button>
+              <button onClick={() => setProvider('openai')}
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                  provider === 'openai' ? 'bg-white text-brand-700 shadow' : 'text-white/70 hover:text-white'
+                }`}
+              >GPT-Image-2</button>
             </div>
             <button onClick={handleRandom}
               className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full text-xs font-medium border border-white/20 transition-colors"
@@ -484,15 +461,6 @@ function App() {
           </div>
         </div>
       </header>
-
-      {/* モバイル用APIキー */}
-      <div className="sm:hidden px-4 pt-2">
-        <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 shadow-sm border border-gray-200">
-          <Icon name="Key" size={14} className="text-gray-400" />
-          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Gemini APIキーを入力" className="flex-1 text-xs outline-none bg-transparent" />
-        </div>
-      </div>
 
       <main className="max-w-7xl mx-auto flex flex-col lg:flex-row gap-3 p-3">
         {/* === 左: 設定パネル === */}
@@ -573,6 +541,33 @@ function App() {
             )}
             {activeTab === 'extra' && (
               <>
+                <Section title="API設定" iconName="Server">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                    <p className="font-bold mb-1 flex items-center gap-1"><Icon name="ShieldCheck" size={12} />セキュリティ</p>
+                    <p>APIキーは Vercel の環境変数に設定してください。ブラウザには保存されません。</p>
+                    <ul className="mt-2 space-y-0.5 list-disc list-inside text-[11px]">
+                      <li><code className="bg-blue-100 px-1 rounded">GEMINI_API_KEY</code> — Gemini用</li>
+                      <li><code className="bg-blue-100 px-1 rounded">OPENAI_API_KEY</code> — GPT-Image-2用</li>
+                    </ul>
+                  </div>
+                  {provider === 'openai' && (
+                    <div className="mt-3">
+                      <label className="block text-xs font-bold text-gray-600 mb-1.5">GPT-Image-2 品質</label>
+                      <div className="flex gap-1.5">
+                        {['low', 'medium', 'high', 'auto'].map(q => (
+                          <button key={q} onClick={() => setOpenaiQuality(q)}
+                            className={`flex-1 px-2 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                              openaiQuality === q
+                                ? 'bg-brand-500 text-white border-brand-500'
+                                : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300'
+                            }`}
+                          >{q}</button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">高品質ほど時間とトークンを消費します</p>
+                    </div>
+                  )}
+                </Section>
                 <Section title="文字・ロゴ" iconName="Type">
                   <input type="text" value={custom.bgText} onChange={(e) => updateCustom('bgText', e.target.value)}
                     placeholder="例: HELLO, 2025, MY NAME" className="w-full p-2.5 rounded-lg border border-gray-200 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-sm transition-all mb-2" />
