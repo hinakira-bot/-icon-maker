@@ -277,6 +277,8 @@ function App() {
   const [prompt, setPrompt] = useState('');
   const [isCopied, setIsCopied] = useState(false);
   const [provider, setProvider] = useState(() => localStorage.getItem('image_provider') || 'gemini');
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
+  const [openaiKey, setOpenaiKey] = useState(() => localStorage.getItem('openai_api_key') || '');
   const [openaiQuality, setOpenaiQuality] = useState(() => localStorage.getItem('openai_quality') || 'high');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState(null);
@@ -292,6 +294,8 @@ function App() {
 
   useEffect(() => { localStorage.setItem('image_provider', provider); }, [provider]);
   useEffect(() => { localStorage.setItem('openai_quality', openaiQuality); }, [openaiQuality]);
+  useEffect(() => { if (geminiKey) localStorage.setItem('gemini_api_key', geminiKey); else localStorage.removeItem('gemini_api_key'); }, [geminiKey]);
+  useEffect(() => { if (openaiKey) localStorage.setItem('openai_api_key', openaiKey); else localStorage.removeItem('openai_api_key'); }, [openaiKey]);
 
   // プロンプト生成
   useEffect(() => {
@@ -322,7 +326,14 @@ function App() {
     navigator.clipboard.writeText(prompt).then(() => { setIsCopied(true); setTimeout(() => setIsCopied(false), 2000); });
   };
 
+  const currentKey = provider === 'openai' ? openaiKey : geminiKey;
+
   const handleGenerate = async () => {
+    if (!currentKey.trim()) {
+      setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーを「その他」タブで設定してください`);
+      setActiveTab('extra');
+      return;
+    }
     setIsGenerating(true); setGenError(''); setGeneratedImage(null);
     const noTextHint = custom.bgText.trim() ? '' : ' Do NOT include any text, letters, words, numbers, watermarks, or logos in the image.';
     const fullPrompt = `Generate an image strictly following ALL details in this description. Do not add, remove, or change any clothing or accessory unless specified. Follow the prompt exactly as written. Output ONLY the image.${noTextHint} ${prompt}`;
@@ -335,7 +346,7 @@ function App() {
 
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': currentKey.trim() },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -373,6 +384,11 @@ function App() {
 
   const handleExpressionVariation = async (expr) => {
     if (!basePromptForVariation || !baseImageForVariation) return;
+    if (!currentKey.trim()) {
+      setGenError(`${provider === 'openai' ? 'OpenAI' : 'Gemini'} APIキーを「その他」タブで設定してください`);
+      setActiveTab('extra');
+      return;
+    }
     setVariationGenerating(expr.id);
     setGenError('');
 
@@ -397,7 +413,7 @@ function App() {
 
       const res = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Api-Key': currentKey.trim() },
         body: JSON.stringify(body),
       });
       const data = await res.json();
@@ -445,15 +461,21 @@ function App() {
             {/* プロバイダー切替 */}
             <div className="flex items-center gap-0.5 bg-white/10 rounded-full p-0.5 border border-white/20">
               <button onClick={() => setProvider('gemini')}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 ${
                   provider === 'gemini' ? 'bg-white text-brand-700 shadow' : 'text-white/70 hover:text-white'
                 }`}
-              >Gemini</button>
+              >
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${geminiKey ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                Gemini
+              </button>
               <button onClick={() => setProvider('openai')}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all flex items-center gap-1 ${
                   provider === 'openai' ? 'bg-white text-brand-700 shadow' : 'text-white/70 hover:text-white'
                 }`}
-              >GPT-Image-2</button>
+              >
+                <span className={`inline-block w-1.5 h-1.5 rounded-full ${openaiKey ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                GPT-Image-2
+              </button>
             </div>
             <button onClick={handleRandom}
               className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-full text-xs font-medium border border-white/20 transition-colors"
@@ -541,17 +563,48 @@ function App() {
             )}
             {activeTab === 'extra' && (
               <>
-                <Section title="API設定" iconName="Server">
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
-                    <p className="font-bold mb-1 flex items-center gap-1"><Icon name="ShieldCheck" size={12} />セキュリティ</p>
-                    <p>APIキーは Vercel の環境変数に設定してください。ブラウザには保存されません。</p>
-                    <ul className="mt-2 space-y-0.5 list-disc list-inside text-[11px]">
-                      <li><code className="bg-blue-100 px-1 rounded">GEMINI_API_KEY</code> — Gemini用</li>
-                      <li><code className="bg-blue-100 px-1 rounded">OPENAI_API_KEY</code> — GPT-Image-2用</li>
-                    </ul>
+                <Section title="APIキー設定" iconName="Key">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 text-[11px] text-blue-800 mb-3 flex gap-2">
+                    <Icon name="ShieldCheck" size={14} className="flex-shrink-0 mt-0.5" />
+                    <div>
+                      APIキーは <strong>あなたのブラウザのみ</strong> に保存され、外部サーバーには保存されません。各自で取得してください。
+                    </div>
                   </div>
+
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-gray-600 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-blue-500"></span>
+                        Gemini APIキー
+                      </label>
+                      <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" className="text-[10px] text-brand-500 hover:underline flex items-center gap-0.5">
+                        取得 <Icon name="ExternalLink" size={10} />
+                      </a>
+                    </div>
+                    <input type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)}
+                      placeholder="AIzaSy..." autoComplete="off"
+                      className="w-full p-2 rounded-lg border border-gray-200 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-xs font-mono transition-all" />
+                    <p className="text-[10px] text-gray-400 mt-1">無料枠あり・Geminiモデル使用</p>
+                  </div>
+
+                  <div className="mb-3">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-bold text-gray-600 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 rounded-full bg-green-500"></span>
+                        OpenAI APIキー
+                      </label>
+                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" className="text-[10px] text-brand-500 hover:underline flex items-center gap-0.5">
+                        取得 <Icon name="ExternalLink" size={10} />
+                      </a>
+                    </div>
+                    <input type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)}
+                      placeholder="sk-..." autoComplete="off"
+                      className="w-full p-2 rounded-lg border border-gray-200 bg-white focus:border-brand-500 focus:ring-2 focus:ring-brand-100 outline-none text-xs font-mono transition-all" />
+                    <p className="text-[10px] text-gray-400 mt-1">有料・GPT-Image-2モデル使用</p>
+                  </div>
+
                   {provider === 'openai' && (
-                    <div className="mt-3">
+                    <div className="mt-3 pt-3 border-t border-gray-100">
                       <label className="block text-xs font-bold text-gray-600 mb-1.5">GPT-Image-2 品質</label>
                       <div className="flex gap-1.5">
                         {['low', 'medium', 'high', 'auto'].map(q => (
@@ -564,7 +617,7 @@ function App() {
                           >{q}</button>
                         ))}
                       </div>
-                      <p className="text-[10px] text-gray-400 mt-1">高品質ほど時間とトークンを消費します</p>
+                      <p className="text-[10px] text-gray-400 mt-1">高品質ほど時間と料金がかかります</p>
                     </div>
                   )}
                 </Section>

@@ -1,27 +1,37 @@
 # SNSアイコンメーカー Pro
 
-Gemini / GPT-Image-2 でアイコン画像を生成するツール。
+Gemini / GPT-Image-2 でアイコン画像を生成するWebアプリ。
 
-## Vercel 環境変数の設定
+## 使い方
 
-Vercel ダッシュボード → Project Settings → Environment Variables で以下を設定：
-
-| 変数名 | 用途 | 取得元 |
-| --- | --- | --- |
-| `GEMINI_API_KEY` | Gemini 画像生成 | https://aistudio.google.com/app/apikey |
-| `OPENAI_API_KEY` | GPT-Image-2 画像生成 | https://platform.openai.com/api-keys |
-
-設定後に **Redeploy** すると反映される。
+1. アプリにアクセス（Vercelデプロイ済URL）
+2. ヘッダーの「Gemini」または「GPT-Image-2」を選択
+3. 「その他」タブを開いて、使うサービスのAPIキーを入力
+   - **Gemini**: https://aistudio.google.com/app/apikey で取得（無料枠あり）
+   - **OpenAI**: https://platform.openai.com/api-keys で取得（有料）
+4. 各タブで好みの設定を選んで「画像を生成」
 
 ## セキュリティ
 
-- APIキーはサーバー側（Vercel環境変数）にのみ保存。ブラウザには一切送信・保存されない
-- クライアント → `/api/gemini-image` または `/api/openai-image` → 各サービス、というプロキシ構成
+- **APIキーはユーザー各自のブラウザのみに保存**（localStorage）
+- サーバー側にはキーを保存しない（Vercelプロキシは中継のみ）
+- HTTPSで暗号化通信
+- プロキシは各リクエストごとにヘッダー `X-Api-Key` で受け取り、即座にOpenAI/Geminiへ転送
+
+## アーキテクチャ
+
+```
+ブラウザ (APIキー保管)
+  ↓ HTTPS + X-Api-Keyヘッダー
+Vercel Proxy (api/*)
+  ↓ HTTPS
+Gemini API / OpenAI API
+```
+
+OpenAI APIはCORSによりブラウザ直接呼び出し不可のため、プロキシ経由が必須。
 
 ## ローカル開発
 
 ```bash
 vercel dev
 ```
-
-ローカルでは `.env.local` に `GEMINI_API_KEY` と `OPENAI_API_KEY` を書く。
